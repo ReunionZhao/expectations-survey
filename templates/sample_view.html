@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sample Question - {{ module }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    body { background: #f0f3f8; padding: 16px; }
+    .sample-stack {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      max-width: 1500px;
+      margin: 0 auto;
+    }
+    .sample-col {
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #d8e1ec;
+      padding: 12px;
+    }
+    .sample-col h3 {
+      margin: 0 0 10px;
+      color: #0a113f;
+      text-align: center;
+    }
+    .sample-col iframe {
+      width: 100%;
+      height: 760px;
+      border: 0;
+      border-radius: 8px;
+      background: white;
+    }
+    .sample-top {
+      max-width: 1500px;
+      margin: 0 auto 14px;
+      color: #0a113f;
+    }
+    .sample-top .tiny { color: #5d718d; margin-top: 4px; }
+    @media (max-width: 1080px) {
+      .sample-stack { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sample-top">
+    <h2>{{ module|replace("_", " ")|title }} sample question</h2>
+    <p class="tiny">Both arms shown below. Core differences are highlighted in bold inside each version.</p>
+  </div>
+  <div class="sample-stack">
+    {% for arm in arms %}
+    <div class="sample-col">
+      <h3>Arm: {{ arm }}</h3>
+      <iframe src="/sample/{{ module }}?arm={{ arm }}" loading="lazy"></iframe>
+    </div>
+    {% endfor %}
+  </div>
+</body>
+</html>

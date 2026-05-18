@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Steve</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>Steve is shy and withdrawn</h1>
+
+      {% if preview %}
+      <div class="preview-banner">Preview mode. Submissions are disabled.</div>
+      {% endif %}
+
+      <div class="vignette">
+        <p>Steve is very shy and withdrawn, invariably helpful, but with little interest in
+        people, or in the world of reality. A meek and tidy soul, he has a need for order
+        and structure, and a passion for detail.</p>
+      </div>
+
+      <form method="post" action="{{ '#' if preview else '/submit/steve' }}" id="steveForm">
+        <p class="question">What is the probability Steve is a: farmer, salesman, airline pilot, librarian, or physician?</p>
+
+        <div class="field-row">
+          <label class="field-label">Most likely</label>
+          <select name="choice_1" required>
+            <option value="" disabled selected>Choose one</option>
+            {% for occ in occupations %}
+            <option value="{{ occ }}">{{ occ }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field-row">
+          <label class="field-label">Second most likely</label>
+          <select name="choice_2" required>
+            <option value="" disabled selected>Choose one</option>
+            {% for occ in occupations %}
+            <option value="{{ occ }}">{{ occ }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <p class="tiny" id="dupWarn" style="display:none;color:#a13a3a">
+          Please pick two different occupations.
+        </p>
+
+        <p class="question">What made you pick those two? Tell us what you were thinking.</p>
+        <textarea name="text" required rows="5"></textarea>
+
+        <button type="submit"{% if preview %} class="submit-disabled" disabled{% endif %}>Submit</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("steveForm");
+    const c1 = form.querySelector('select[name="choice_1"]');
+    const c2 = form.querySelector('select[name="choice_2"]');
+    const warn = document.getElementById("dupWarn");
+    form.addEventListener("submit", (e) => {
+      if (c1.value && c2.value && c1.value === c2.value) {
+        e.preventDefault();
+        warn.style.display = "block";
+      }
+    });
+    [c1, c2].forEach((el) => el.addEventListener("change", () => {
+      warn.style.display = "none";
+    }));
+  </script>
+</body>
+</html>

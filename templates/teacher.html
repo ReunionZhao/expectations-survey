@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Expectations Survey</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="page">
+    <div class="card wide">
+      <h1>Expectations Survey</h1>
+      <p id="statusText" class="tiny status-line"></p>
+
+      <div class="grid grid-three">
+        <div class="panel qr-panel">
+          <h3>Letter K</h3>
+          <img src="/api/qr/letter_k" alt="Letter K QR" class="qr">
+          <div class="module-buttons">
+            <a class="link-btn btn-sample" href="/sample/letter_k" target="_blank" rel="noopener noreferrer">Sample Question</a>
+            <button class="control-btn btn-refresh" data-action="refresh">Refresh now</button>
+            <button class="control-btn btn-analyze" data-action="reanalyze" data-module="letter_k">Reanalyze</button>
+            <button class="control-btn btn-prompt" data-action="prompt" data-module="letter_k">View prompt</button>
+            <button class="control-btn btn-reset" data-action="reset" data-module="letter_k">Reset data</button>
+          </div>
+        </div>
+
+        <div class="panel qr-panel">
+          <h3>Steve</h3>
+          <img src="/api/qr/steve" alt="Steve QR" class="qr">
+          <div class="module-buttons">
+            <a class="link-btn btn-sample" href="/sample/steve" target="_blank" rel="noopener noreferrer">Sample Question</a>
+            <button class="control-btn btn-refresh" data-action="refresh">Refresh now</button>
+            <button class="control-btn btn-analyze" data-action="reanalyze" data-module="steve">Reanalyze</button>
+            <button class="control-btn btn-prompt" data-action="prompt" data-module="steve">View prompt</button>
+            <button class="control-btn btn-reset" data-action="reset" data-module="steve">Reset data</button>
+          </div>
+        </div>
+
+        <div class="panel qr-panel">
+          <h3>Taxi Cab</h3>
+          <img src="/api/qr/taxi" alt="Taxi QR" class="qr">
+          <div class="module-buttons">
+            <a class="link-btn btn-sample" href="/sample/taxi" target="_blank" rel="noopener noreferrer">Sample Question</a>
+            <button class="control-btn btn-refresh" data-action="refresh">Refresh now</button>
+            <button class="control-btn btn-analyze" data-action="reanalyze" data-module="taxi">Reanalyze</button>
+            <button class="control-btn btn-prompt" data-action="prompt" data-module="taxi">View prompt</button>
+            <button class="control-btn btn-reset" data-action="reset" data-module="taxi">Reset data</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============== Letter K ============== -->
+      <section class="module-section module-letter-k first-module">
+        <h2 class="module-title">Letter K</h2>
+        <p class="module-blurb">Random assignment between two arms. Arm <em>first</em>: students see "K as the first letter". Arm <em>third</em>: students see "K as the third letter".</p>
+        <p class="module-counts">Responses received: first <strong id="kCountFirst">0</strong>, third <strong id="kCountThird">0</strong>.</p>
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Distribution of guesses, arm: first</h3>
+            <canvas id="kHistFirst" height="180"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Distribution of guesses, arm: third</h3>
+            <canvas id="kHistThird" height="180"></canvas>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Reasoning labels by arm</h3>
+          <canvas id="kLabels" height="110"></canvas>
+        </div>
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Word cloud, arm: first</h3>
+            <img id="kWcFirst" class="word-cloud-img" src="/api/wordcloud_image/letter_k/first" alt="">
+          </div>
+          <div class="panel">
+            <h3>Word cloud, arm: third</h3>
+            <img id="kWcThird" class="word-cloud-img" src="/api/wordcloud_image/letter_k/third" alt="">
+          </div>
+        </div>
+
+        <div class="panel raw-data-panel">
+          <h3>Letter K raw data (click to expand)</h3>
+          <div id="kLatest"></div>
+        </div>
+      </section>
+
+      <!-- ============== Steve ============== -->
+      <section class="module-section module-steve">
+        <h2 class="module-title">Steve</h2>
+        <p class="module-blurb">Single arm: everyone reads the same description. Each student picks "most likely" and "second most likely" from Farmer, Salesman, Airline Pilot, Librarian, Physician.</p>
+        <p class="module-counts">Total responses: <strong id="steveTotalLocal">0</strong>.</p>
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Most likely occupation</h3>
+            <canvas id="steveFirst" height="180"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Second most likely occupation</h3>
+            <canvas id="steveSecond" height="180"></canvas>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Reasoning labels</h3>
+            <canvas id="steveLabels" height="180"></canvas>
+          </div>
+          <div class="panel">
+            <h3>First &rarr; Second pick flow</h3>
+            <div id="steveHeatmapWrap"></div>
+            <p class="tiny">Rows are "most likely". Columns are "second most likely". Cells show % of total responses.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Word cloud</h3>
+          <div class="wc-single-wrap">
+            <img id="steveWc" class="word-cloud-img" src="/api/wordcloud_image/steve/all" alt="">
+          </div>
+        </div>
+
+        <div class="panel raw-data-panel">
+          <h3>Steve raw data (click to expand)</h3>
+          <div id="steveLatest"></div>
+        </div>
+      </section>
+
+      <!-- ============== Taxi Cab ============== -->
+      <section class="module-section module-taxi">
+        <h2 class="module-title">Taxi Cab</h2>
+        <p class="module-blurb">Random assignment between two arms. Arm <em>probability</em>: probability narrative framing. Arm <em>frequentist</em>: explicit counts framing. Bayesian posterior &asymp; 57%. Witness accuracy anchor &asymp; 80%. Base rate anchor &asymp; 25%.</p>
+        <p class="module-counts">Responses received: probability <strong id="taxiCountProb">0</strong>, frequentist <strong id="taxiCountFreq">0</strong>.</p>
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Distribution of guesses, arm: probability</h3>
+            <canvas id="taxiHistProb" height="180"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Distribution of guesses, arm: frequentist</h3>
+            <canvas id="taxiHistFreq" height="180"></canvas>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Reasoning labels by arm</h3>
+          <canvas id="taxiLabels" height="110"></canvas>
+        </div>
+
+        <div class="grid">
+          <div class="panel">
+            <h3>Word cloud, arm: probability</h3>
+            <img id="taxiWcProb" class="word-cloud-img" src="/api/wordcloud_image/taxi/probability" alt="">
+          </div>
+          <div class="panel">
+            <h3>Word cloud, arm: frequentist</h3>
+            <img id="taxiWcFreq" class="word-cloud-img" src="/api/wordcloud_image/taxi/frequentist" alt="">
+          </div>
+        </div>
+
+        <div class="panel raw-data-panel">
+          <h3>Taxi Cab raw data (click to expand)</h3>
+          <div id="taxiLatest"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="promptModal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="promptTitle">Prompt</h3>
+      <pre id="promptContent"></pre>
+      <button id="closePromptBtn">Close</button>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>

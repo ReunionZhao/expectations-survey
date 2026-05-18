@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taxi Cab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>Taxi Cab</h1>
+
+      {% if preview %}
+      <div class="preview-banner">Preview mode (arm: {{ arm }}). Submissions are disabled.</div>
+      {% endif %}
+
+      {% if arm == "probability" %}
+      <div class="vignette">
+        <p>Two taxi cab companies operate in a given city, the Green and the Blue
+        (according to the color of cab they run). <strong>75% of the cabs in the city are
+        Blue</strong>, and the remaining <strong>25% are Green</strong>. A cab was involved
+        in a hit-and-run accident at night. A witness later identified the cab as a Green cab.</p>
+        <p>The court tested the witness's ability to distinguish between Blue and Green cabs
+        under nighttime visibility conditions. It found that the witness was able to identify
+        each color correctly <strong>about 80% of the time</strong>, but confused it with the
+        other color <strong>about 20% of the time</strong>.</p>
+      </div>
+      {% else %}
+      <div class="vignette">
+        <p>Two taxi cab companies operate in a given city, the Green and the Blue
+        (according to the color of cab they run). <strong>Out of every 100 cabs in the city,
+        75 are Blue and the remaining 25 are Green.</strong> A cab was involved in a
+        hit-and-run accident at night. A witness later identified the cab as a Green cab.</p>
+        <p>The court tested the witness's ability to distinguish between Blue and Green cabs
+        under nighttime visibility conditions. It found that, <strong>out of every 25 Green
+        cabs, the witness identified 20 as Green</strong>; and <strong>out of every 75 Blue
+        cabs, the witness identified 15 as Green.</strong></p>
+      </div>
+      {% endif %}
+
+      <form method="post" action="{{ '#' if preview else '/submit/taxi' }}">
+        <p class="question">
+          What do you think is the percent chance that the errant cab was indeed Green,
+          as the witness claimed?
+        </p>
+
+        <div class="numeric-row">
+          <input type="number" name="numeric" min="0" max="100" step="0.1" required placeholder="0 to 100" autocomplete="off">
+          <span class="unit">%</span>
+        </div>
+
+        <p class="question">How did you get to that number? Walk us through your thinking.</p>
+        <textarea name="text" required rows="5"></textarea>
+
+        <button type="submit"{% if preview %} class="submit-disabled" disabled{% endif %}>Submit</button>
+      </form>
+    </div>
+  </div>
+  <script>
+    const numEl = document.querySelector('input[name="numeric"]');
+    function clamp() {
+      if (numEl.value === "") return;
+      const v = parseFloat(numEl.value);
+      if (isNaN(v)) return;
+      if (v < 0) numEl.value = 0;
+      if (v > 100) numEl.value = 100;
+    }
+    numEl.addEventListener("input", clamp);
+    numEl.addEventListener("blur", clamp);
+  </script>
+</body>
+</html>

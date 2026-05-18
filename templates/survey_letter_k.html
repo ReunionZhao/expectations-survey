@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Letter K</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>Consider the letter K.</h1>
+
+      {% if preview %}
+      <div class="preview-banner">Preview mode (arm: {{ arm }}). Submissions are disabled.</div>
+      {% endif %}
+
+      <form method="post" action="{{ '#' if preview else '/submit/letter_k' }}">
+        {% if arm == "first" %}
+        <p class="question">About what percentage of English words have K as the <strong>first letter</strong></p>
+        <p class="letter-slots"><strong>k</strong> _ _ _ _ _ _</p>
+        {% else %}
+        <p class="question">About what percentage of English words have K as the <strong>third letter</strong></p>
+        <p class="letter-slots">_ _ <strong>k</strong> _ _ _ _</p>
+        {% endif %}
+
+        <div class="numeric-row">
+          <input type="number" name="numeric" min="0" max="100" step="0.1" required placeholder="0 to 100" autocomplete="off">
+          <span class="unit">%</span>
+        </div>
+
+        <p class="question">Walk us through how you came up with that number.</p>
+        <textarea name="text" required rows="5"></textarea>
+
+        <button type="submit"{% if preview %} class="submit-disabled" disabled{% endif %}>Submit</button>
+      </form>
+    </div>
+  </div>
+  <script>
+    const numEl = document.querySelector('input[name="numeric"]');
+    function clamp() {
+      if (numEl.value === "") return;
+      const v = parseFloat(numEl.value);
+      if (isNaN(v)) return;
+      if (v < 0) numEl.value = 0;
+      if (v > 100) numEl.value = 100;
+    }
+    numEl.addEventListener("input", clamp);
+    numEl.addEventListener("blur", clamp);
+  </script>
+</body>
+</html>
