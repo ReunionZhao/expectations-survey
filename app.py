@@ -25,27 +25,34 @@ ANALYSIS_EXECUTOR = ThreadPoolExecutor(max_workers=20)
 
 MODULES = ("letter_k", "steve", "taxi")
 MODULE_ARMS = {
-    "letter_k": ("first", "third"),
+    "letter_k": ("n", "ing"),
     "steve": (None,),
     "taxi": ("probability", "frequentist"),
 }
 STEVE_OCCUPATIONS = ("Farmer", "Salesman", "Airline Pilot", "Librarian", "Physician")
+STEVE_RANKS = (1, 2, 3, 4, 5)
 
 # ---------- Classification prompts ----------
 
 PROMPT_LETTER_K = """
 You are a strict classifier for classroom survey responses about word-frequency intuitions.
 
-Context: The respondent estimated what percentage of English words have the letter K
-either as the first letter OR as the third letter (between-subject, only one arm seen).
-They then explained how they arrived at the number.
+Context: The respondent estimated what percentage of 7-letter English words fit one of
+two patterns (between-subject, only one arm seen):
+  arm "n"   -> pattern "_ _ _ _ _ n _"  (n as the 6th of 7 letters)
+  arm "ing" -> pattern "_ _ _ _ i n g"  (7-letter words ending in "ing")
+Note: every "____ing" word is also a "_____n_" word, so logically the "ing" estimate
+must be lower than the "n" estimate. Tversky-Kahneman found the opposite, driven by
+availability: "ing" words are easier to recall.
 
 Classify their reasoning into one of:
 1) availability_heuristic - Mentally retrieved/recalled words and counted what came to mind
-   (e.g., "I thought of words like king, kid, knight"). Working from examples that came to mind.
+   (e.g., "I thought of words like running, eating, sitting"). Working from examples that
+   came to mind, with little structural reasoning.
 2) systematic_estimation - Used systematic / structural knowledge: letter frequency, position
-   frequency, total English vocabulary size, dictionary knowledge, alphabet probability,
-   knowledge of English orthography. Inference from general structure rather than recalled examples.
+   frequency, total English vocabulary size, dictionary knowledge, set-inclusion logic
+   (e.g., notes that "ing" must be a subset of "n6"). Inference from general structure
+   rather than recalled examples.
 3) pure_guess - Explicitly says "guess", "no idea", "random", or extremely brief / uncertain.
 4) other - Doesn't fit any category.
 
@@ -56,7 +63,7 @@ Return JSON only:
   "rationale": "short explanation in <= 20 words"
 }}
 
-Arm: {arm}  (first = K as first letter, third = K as third letter)
+Arm: {arm}  (n = "_____n_", ing = "____ing")
 Their numeric guess: {numeric}%
 Their reasoning: {text}
 """.strip()
@@ -66,9 +73,9 @@ You are a strict classifier for classroom survey responses to the "Steve" proble
 (Tversky and Kahneman, representativeness heuristic).
 
 Context: Respondent read a description of Steve as shy, withdrawn, helpful, meek, tidy,
-needing order and structure, with a passion for detail. They picked the most likely and
-second most likely occupation from: Farmer, Salesman, Airline Pilot, Librarian, Physician.
-They then explained their reasoning.
+needing order and structure, with a passion for detail. They ranked all five occupations
+(Farmer, Salesman, Airline Pilot, Librarian, Physician) from most likely (rank 1) to
+least likely (rank 5). They then explained their reasoning.
 
 Classify their reasoning into one of:
 1) representativeness - Reasoning is dominated by matching Steve's personality description
@@ -86,8 +93,12 @@ Return JSON only:
   "rationale": "short explanation in <= 20 words"
 }}
 
-Their most likely pick: {choice_1}
-Their second most likely pick: {choice_2}
+Their ranking (1 = most likely, 5 = least likely):
+  1. {choice_1}
+  2. {choice_2}
+  3. {choice_3}
+  4. {choice_4}
+  5. {choice_5}
 Their reasoning: {text}
 """.strip()
 
@@ -157,6 +168,9 @@ def init_db():
                 numeric_value REAL,
                 choice_1 TEXT,
                 choice_2 TEXT,
+                choice_3 TEXT,
+                choice_4 TEXT,
+                choice_5 TEXT,
                 text_value TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 label TEXT,
@@ -167,6 +181,11 @@ def init_db():
             )
             """
         )
+        # Migration: older databases pre-date the rank columns (choice_3..5).
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(responses)").fetchall()}
+        for col in ("choice_3", "choice_4", "choice_5"):
+            if col not in existing:
+                conn.execute(f"ALTER TABLE responses ADD COLUMN {col} TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_module ON responses(module)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_module_arm ON responses(module, arm)")
         conn.commit()
@@ -238,9 +257,11 @@ def heuristic_label(module, text):
     t = (text or "").lower()
     if module == "letter_k":
         avail = ["think of words", "came to mind", "remembered", "examples like",
-                 "words like", "i thought of", "kid", "king", "knife"]
-        syst = ["frequency", "alphabet", "26 letters", "position", "rare letter",
-                "uncommon letter", "total words", "dictionary"]
+                 "words like", "i thought of", "running", "eating", "sitting",
+                 "ending in ing", "ends with ing"]
+        syst = ["frequency", "alphabet", "26 letters", "position", "subset",
+                "must be lower", "logically", "total words", "dictionary",
+                "set of all", "all ing words"]
         a = sum(1 for w in avail if w in t)
         s = sum(1 for w in syst if w in t)
         if a > s and a >= 1:
@@ -280,7 +301,7 @@ def heuristic_label(module, text):
     return {"label": label, "confidence": 0.5, "rationale": "Keyword fallback", "source": "heuristic"}
 
 
-def classify_with_openai(module, arm, numeric, choice_1, choice_2, text):
+def classify_with_openai(module, arm, numeric, choices, text):
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return heuristic_label(module, text)
@@ -288,8 +309,11 @@ def classify_with_openai(module, arm, numeric, choice_1, choice_2, text):
     prompt = MODULE_PROMPTS[module].format(
         arm=arm or "",
         numeric=numeric if numeric is not None else "",
-        choice_1=choice_1 or "",
-        choice_2=choice_2 or "",
+        choice_1=(choices[0] if len(choices) > 0 else None) or "",
+        choice_2=(choices[1] if len(choices) > 1 else None) or "",
+        choice_3=(choices[2] if len(choices) > 2 else None) or "",
+        choice_4=(choices[3] if len(choices) > 3 else None) or "",
+        choice_5=(choices[4] if len(choices) > 4 else None) or "",
         text=(text or "").strip(),
     )
 
@@ -332,8 +356,8 @@ def classify_with_openai(module, arm, numeric, choice_1, choice_2, text):
     }
 
 
-def analyze_and_store(response_id, module, arm, numeric, choice_1, choice_2, text):
-    result = classify_with_openai(module, arm, numeric, choice_1, choice_2, text)
+def analyze_and_store(response_id, module, arm, numeric, choices, text):
+    result = classify_with_openai(module, arm, numeric, choices, text)
     try:
         with db_conn() as conn:
             conn.execute(
@@ -356,7 +380,8 @@ def fetch_stats():
     with db_conn() as conn:
         rows = conn.execute(
             """
-            SELECT id, respondent_id, module, arm, numeric_value, choice_1, choice_2,
+            SELECT id, respondent_id, module, arm, numeric_value,
+                   choice_1, choice_2, choice_3, choice_4, choice_5,
                    text_value, created_at, label
             FROM responses
             ORDER BY id DESC
@@ -367,20 +392,20 @@ def fetch_stats():
     for r in rows:
         per_module[r["module"]].append(dict(r))
 
-    # ---- letter_k ----
+    # ---- letter_k (now: "Example" question with arms n and ing) ----
+    letter_k_arms = MODULE_ARMS["letter_k"]  # ("n", "ing")
     k_stats = {
         "total": len(per_module["letter_k"]),
-        "by_arm": {"first": [], "third": []},  # raw numeric values
+        "by_arm": {a: [] for a in letter_k_arms},
         "label_counts_by_arm": {
-            "first": {lbl: 0 for lbl in MODULE_LABELS["letter_k"]},
-            "third": {lbl: 0 for lbl in MODULE_LABELS["letter_k"]},
+            a: {lbl: 0 for lbl in MODULE_LABELS["letter_k"]} for a in letter_k_arms
         },
-        "label_unclassified_by_arm": {"first": 0, "third": 0},
+        "label_unclassified_by_arm": {a: 0 for a in letter_k_arms},
         "latest": [],
     }
     for r in per_module["letter_k"]:
         arm = r["arm"]
-        if arm in ("first", "third"):
+        if arm in letter_k_arms:
             if r["numeric_value"] is not None:
                 k_stats["by_arm"][arm].append(r["numeric_value"])
             if r["label"] in MODULE_LABELS["letter_k"]:
@@ -395,31 +420,32 @@ def fetch_stats():
             "created_at": r["created_at"],
         })
 
-    # ---- steve ----
+    # ---- steve (now: full 1-5 ranking) ----
+    # rank_counts[rank_index 0..4][occupation] = number of respondents who placed
+    # that occupation at that rank.
     steve_stats = {
-        "total": len(per_module["steve"]),
-        "first_counts": {o: 0 for o in STEVE_OCCUPATIONS},
-        "second_counts": {o: 0 for o in STEVE_OCCUPATIONS},
-        "first_to_second": {o: {o2: 0 for o2 in STEVE_OCCUPATIONS} for o in STEVE_OCCUPATIONS},
+        "total": 0,  # counts only respondents with a complete ranking
+        "rank_counts": [{o: 0 for o in STEVE_OCCUPATIONS} for _ in range(5)],
         "label_counts": {lbl: 0 for lbl in MODULE_LABELS["steve"]},
         "label_unclassified": 0,
         "latest": [],
     }
     for r in per_module["steve"]:
-        c1 = r["choice_1"]
-        c2 = r["choice_2"]
-        if c1 in STEVE_OCCUPATIONS:
-            steve_stats["first_counts"][c1] += 1
-        if c2 in STEVE_OCCUPATIONS:
-            steve_stats["second_counts"][c2] += 1
-        if c1 in STEVE_OCCUPATIONS and c2 in STEVE_OCCUPATIONS:
-            steve_stats["first_to_second"][c1][c2] += 1
-        if r["label"] in MODULE_LABELS["steve"]:
-            steve_stats["label_counts"][r["label"]] += 1
-        else:
-            steve_stats["label_unclassified"] += 1
+        ranking = [r["choice_1"], r["choice_2"], r["choice_3"], r["choice_4"], r["choice_5"]]
+        complete = (
+            all(c in STEVE_OCCUPATIONS for c in ranking)
+            and len(set(ranking)) == len(STEVE_OCCUPATIONS)
+        )
+        if complete:
+            steve_stats["total"] += 1
+            for i, occ in enumerate(ranking):
+                steve_stats["rank_counts"][i][occ] += 1
+            if r["label"] in MODULE_LABELS["steve"]:
+                steve_stats["label_counts"][r["label"]] += 1
+            else:
+                steve_stats["label_unclassified"] += 1
         steve_stats["latest"].append({
-            "choice_1": c1, "choice_2": c2,
+            "ranking": ranking,
             "text": r["text_value"],
             "label": r["label"] or "unclassified",
             "created_at": r["created_at"],
@@ -527,7 +553,9 @@ def sample_module(module):
     return render_template(template, **context)
 
 
-def _submit_module(module, arm, numeric_value, choice_1, choice_2, text):
+def _submit_module(module, arm, numeric_value, choices, text):
+    """choices: tuple/list of up to 5 entries (pad with None)."""
+    padded = list(choices) + [None] * (5 - len(choices))
     rid = get_or_set_respondent()
     if has_submitted(rid, module):
         return render_template("thanks.html", module=module)
@@ -536,15 +564,19 @@ def _submit_module(module, arm, numeric_value, choice_1, choice_2, text):
         cur = conn.execute(
             """
             INSERT INTO responses
-            (respondent_id, module, arm, numeric_value, choice_1, choice_2, text_value, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (respondent_id, module, arm, numeric_value,
+             choice_1, choice_2, choice_3, choice_4, choice_5,
+             text_value, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (rid, module, arm, numeric_value, choice_1, choice_2, text, created_at),
+            (rid, module, arm, numeric_value,
+             padded[0], padded[1], padded[2], padded[3], padded[4],
+             text, created_at),
         )
         new_id = cur.lastrowid
         conn.commit()
     ANALYSIS_EXECUTOR.submit(
-        analyze_and_store, new_id, module, arm, numeric_value, choice_1, choice_2, text
+        analyze_and_store, new_id, module, arm, numeric_value, padded, text
     )
     return render_template("thanks.html", module=module)
 
@@ -563,21 +595,20 @@ def submit_letter_k():
     text = (request.form.get("text") or "").strip()
     if not text:
         return "Reasoning required", 400
-    return _submit_module("letter_k", arm, pct, None, None, text)
+    return _submit_module("letter_k", arm, pct, (), text)
 
 
 @app.post("/submit/steve")
 def submit_steve():
-    c1 = request.form.get("choice_1")
-    c2 = request.form.get("choice_2")
-    if c1 not in STEVE_OCCUPATIONS or c2 not in STEVE_OCCUPATIONS:
+    ranking = [request.form.get(f"choice_{i}") for i in range(1, 6)]
+    if any(c not in STEVE_OCCUPATIONS for c in ranking):
         return "Invalid occupation choices", 400
-    if c1 == c2:
-        return "Most likely and second most likely must differ", 400
+    if len(set(ranking)) != len(STEVE_OCCUPATIONS):
+        return "Each occupation must be ranked exactly once", 400
     text = (request.form.get("text") or "").strip()
     if not text:
         return "Reasoning required", 400
-    return _submit_module("steve", None, None, c1, c2, text)
+    return _submit_module("steve", None, None, ranking, text)
 
 
 @app.post("/submit/taxi")
@@ -594,7 +625,7 @@ def submit_taxi():
     text = (request.form.get("text") or "").strip()
     if not text:
         return "Reasoning required", 400
-    return _submit_module("taxi", arm, pct, None, None, text)
+    return _submit_module("taxi", arm, pct, (), text)
 
 
 # ---------- Routes: teacher ----------
@@ -642,7 +673,7 @@ def _wordcloud_png(texts):
         "would", "could", "also", "because", "really", "think", "thought",
         "people", "person", "thing", "things", "one", "two",
         "maybe", "probably", "guess", "just",
-        "letter", "word", "words",
+        "letter", "word", "words", "pattern", "form",
         "cab", "cabs", "taxi", "witness", "color", "colour", "green", "blue",
         "occupation", "steve", "librarian", "farmer", "salesman", "pilot", "physician",
     })
@@ -698,19 +729,28 @@ def api_wordcloud_image(module, arm):
     return resp
 
 
+_PENDING_COLS = (
+    "id, module, arm, numeric_value, "
+    "choice_1, choice_2, choice_3, choice_4, choice_5, text_value"
+)
+
+
+def _row_choices(r):
+    return [r["choice_1"], r["choice_2"], r["choice_3"], r["choice_4"], r["choice_5"]]
+
+
 @app.post("/api/analyze_pending")
 def api_analyze_pending():
     """Manual fallback: re-fire analysis for any rows that are still unlabeled."""
     with db_conn() as conn:
         rows = conn.execute(
-            "SELECT id, module, arm, numeric_value, choice_1, choice_2, text_value "
-            "FROM responses WHERE label IS NULL"
+            f"SELECT {_PENDING_COLS} FROM responses WHERE label IS NULL"
         ).fetchall()
     for r in rows:
         ANALYSIS_EXECUTOR.submit(
             analyze_and_store,
             r["id"], r["module"], r["arm"], r["numeric_value"],
-            r["choice_1"], r["choice_2"], r["text_value"],
+            _row_choices(r), r["text_value"],
         )
     return jsonify({"ok": True, "queued": len(rows)})
 
@@ -722,15 +762,14 @@ def api_analyze_pending_module(module):
         return "Invalid module", 400
     with db_conn() as conn:
         rows = conn.execute(
-            "SELECT id, module, arm, numeric_value, choice_1, choice_2, text_value "
-            "FROM responses WHERE label IS NULL AND module = ?",
+            f"SELECT {_PENDING_COLS} FROM responses WHERE label IS NULL AND module = ?",
             (module,),
         ).fetchall()
     for r in rows:
         ANALYSIS_EXECUTOR.submit(
             analyze_and_store,
             r["id"], r["module"], r["arm"], r["numeric_value"],
-            r["choice_1"], r["choice_2"], r["text_value"],
+            _row_choices(r), r["text_value"],
         )
     return jsonify({"ok": True, "queued": len(rows), "module": module})
 

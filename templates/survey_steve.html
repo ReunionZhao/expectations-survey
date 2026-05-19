@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Steve</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
 <body>
   <div class="page">
@@ -22,33 +23,24 @@
       </div>
 
       <form method="post" action="{{ '#' if preview else '/submit/steve' }}" id="steveForm">
-        <p class="question">What is the probability Steve is a: farmer, salesman, airline pilot, librarian, or physician?</p>
+        <p class="question">Rank these occupations from <strong>most likely</strong> (1) to <strong>least likely</strong> (5):</p>
+        <p class="tiny ranker-hint">Drag to reorder. The number on the left updates automatically.</p>
 
-        <div class="field-row">
-          <label class="field-label">Most likely</label>
-          <select name="choice_1" required>
-            <option value="" disabled selected>Choose one</option>
-            {% for occ in occupations %}
-            <option value="{{ occ }}">{{ occ }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        <ul id="rankList" class="rank-list">
+          {% for occ in occupations %}
+          <li class="rank-item" data-occ="{{ occ }}">
+            <span class="rank-num">{{ loop.index }}</span>
+            <span class="rank-grip" aria-hidden="true">&#x2630;</span>
+            <span class="rank-name">{{ occ }}</span>
+          </li>
+          {% endfor %}
+        </ul>
 
-        <div class="field-row">
-          <label class="field-label">Second most likely</label>
-          <select name="choice_2" required>
-            <option value="" disabled selected>Choose one</option>
-            {% for occ in occupations %}
-            <option value="{{ occ }}">{{ occ }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        {% for i in range(1, 6) %}
+        <input type="hidden" name="choice_{{ i }}" id="choice_{{ i }}" value="">
+        {% endfor %}
 
-        <p class="tiny" id="dupWarn" style="display:none;color:#a13a3a">
-          Please pick two different occupations.
-        </p>
-
-        <p class="question">What made you pick those two? Tell us what you were thinking.</p>
+        <p class="question">What made you choose this ranking? Tell us what you were thinking.</p>
         <textarea name="text" required rows="5"></textarea>
 
         <button type="submit"{% if preview %} class="submit-disabled" disabled{% endif %}>Submit</button>
@@ -57,19 +49,49 @@
   </div>
 
   <script>
+    const list = document.getElementById("rankList");
     const form = document.getElementById("steveForm");
-    const c1 = form.querySelector('select[name="choice_1"]');
-    const c2 = form.querySelector('select[name="choice_2"]');
-    const warn = document.getElementById("dupWarn");
+
+    function renumber() {
+      Array.from(list.children).forEach((li, idx) => {
+        const num = li.querySelector(".rank-num");
+        if (num) num.textContent = String(idx + 1);
+      });
+    }
+
+    function syncHidden() {
+      Array.from(list.children).forEach((li, idx) => {
+        const input = document.getElementById(`choice_${idx + 1}`);
+        if (input) input.value = li.dataset.occ || "";
+      });
+    }
+
+    // Initial sync so even an unmoved ranking submits cleanly
+    syncHidden();
+
+    Sortable.create(list, {
+      animation: 160,
+      ghostClass: "rank-ghost",
+      chosenClass: "rank-chosen",
+      dragClass: "rank-drag",
+      forceFallback: true,           // consistent UX on touch + desktop
+      fallbackTolerance: 4,
+      onEnd: () => {
+        renumber();
+        syncHidden();
+      },
+    });
+
+    {% if not preview %}
     form.addEventListener("submit", (e) => {
-      if (c1.value && c2.value && c1.value === c2.value) {
+      syncHidden();
+      const vals = [1,2,3,4,5].map(i => document.getElementById(`choice_${i}`).value);
+      if (vals.some(v => !v) || new Set(vals).size !== 5) {
         e.preventDefault();
-        warn.style.display = "block";
+        alert("Please rank all five occupations.");
       }
     });
-    [c1, c2].forEach((el) => el.addEventListener("change", () => {
-      warn.style.display = "none";
-    }));
+    {% endif %}
   </script>
 </body>
 </html>

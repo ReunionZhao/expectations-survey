@@ -1,10 +1,11 @@
 """
 Seed the database with 20 fake responses per module.
 Distributions are designed to reproduce the classic Tversky / Kahneman effects:
-  Letter K: arm "first" overestimates (availability), arm "third" underestimates.
-  Steve: most students pick Librarian (representativeness, base rate ignored).
-  Taxi: probability framing anchors near 80 percent (witness accuracy),
-        frequentist framing more diffuse, closer to the Bayesian 57 percent.
+  Example: arm "ing" (____ing) is over-estimated thanks to availability, while
+           arm "n" (_____n_) — which strictly contains "ing" — is under-estimated.
+  Steve:   most students rank Librarian #1 (representativeness, base rate ignored).
+  Taxi:    probability framing anchors near 80 percent (witness accuracy),
+           frequentist framing more diffuse, closer to the Bayesian 57 percent.
 
 Usage:
   python seed_fake_data.py
@@ -16,55 +17,76 @@ import uuid
 
 import requests
 
-BASE = os.getenv("SEED_BASE", "http://127.0.0.1:5001")
+BASE = os.getenv("SEED_BASE", "https://expectations-survey.onrender.com")
 
-LETTER_K_FIRST = [
-    (5, "I tried to think of words starting with K and got things like king, kid, knife. There seem to be a decent amount."),
-    (8, "Recalled words like king, kitchen, knee, kind. Maybe somewhat common."),
-    (10, "Words like keep, kind, key come to mind. Probably around 10 percent."),
-    (10, "Counted in my head: king, kitchen, knife, knee. Several come to mind quickly."),
-    (12, "Letter K starts many basic words. My estimate is around 12 percent."),
-    (15, "There are quite a few common K words. I think 15 is reasonable."),
-    (15, "Thought of about a dozen K starting words. Guessed proportionally."),
-    (18, "Many words: king, kid, keep, kind, kitchen, key. Felt like a lot."),
-    (20, "Felt like K starts a lot of common nouns. Estimated high."),
-    (25, "Lots of common K words. Probably around a quarter of all words."),
+LETTER_K_N = [
+    (5, "Hard to come up with 7-letter words with n as the sixth letter. Felt rare."),
+    (5, "Couldn't think of many obvious examples. Maybe 5 percent."),
+    (6, "Tried a few candidates. Few came to mind so my estimate is low."),
+    (8, "Words ending in -n- _ are not what jumps to mind. Probably uncommon."),
+    (8, "Mostly drew a blank. Guessing on the low end."),
+    (10, "Did not retrieve many quickly. Settled around 10 percent."),
+    (10, "Estimated based on how few I could enumerate."),
+    (12, "A bit higher because n is a common letter overall, but position is restrictive."),
+    (14, "Tough constraint. Picked a middling number."),
+    (15, "Pulled a few like 'meaning' would count if i shift letters, so maybe modest."),
 ]
 
-LETTER_K_THIRD = [
-    (0.5, "Could barely think of any word with K as the third letter. Very rare."),
-    (1, "Couldn't recall any examples easily. Probably under 1 percent."),
-    (2, "Thinking of words like ask, joke. Few examples came up."),
-    (2, "Hard to retrieve examples. My best guess is 2 percent."),
-    (3, "Only thought of a few like make, like. Position three is uncommon."),
-    (3, "K is rare in English anyway, especially in this position."),
-    (5, "Thinking systematically, K is rare so 5 percent seems right."),
-    (5, "Letter frequencies suggest K is uncommon. Position matters less."),
-    (8, "Took my time and came up with ask, joke, like, make. Could be 8 percent."),
-    (10, "Considering English uses K in many positions, maybe higher than feels."),
+LETTER_K_ING = [
+    (12, "Lots of '-ing' words came to mind: running, eating, sitting. Felt common."),
+    (15, "There are tons of present participles. 15 percent feels right."),
+    (18, "Loads of verbs in -ing form. Probably high."),
+    (20, "Recalled many examples easily, so I estimated 20 percent."),
+    (22, "Examples kept coming: walking, jumping, talking, painting."),
+    (25, "Felt like a quarter of 7-letter words end in ing."),
+    (25, "So many ing words pop into my head."),
+    (28, "Strongly skewed by ease of recall. High estimate."),
+    (30, "Recalled dozens. Picked something on the higher end."),
+    (32, "Verb-ing seems incredibly common in English. Went high."),
 ]
 
+# Each row: a 5-tuple of (rank1, rank2, rank3, rank4, rank5) + reasoning text.
 STEVE_DATA = [
-    ("Librarian", "Physician", "He sounds like a librarian. Shy and orderly fits perfectly."),
-    ("Librarian", "Physician", "The description matches the librarian stereotype."),
-    ("Librarian", "Farmer", "He sounds quiet, like someone who works in books."),
-    ("Librarian", "Salesman", "Tidy and orderly equals librarian."),
-    ("Librarian", "Physician", "Meek and detail oriented strongly suggests librarian."),
-    ("Librarian", "Farmer", "His personality fits the librarian image."),
-    ("Librarian", "Physician", "Shy and structured points to librarian over the others."),
-    ("Librarian", "Salesman", "All those traits scream librarian to me."),
-    ("Librarian", "Physician", "Picked librarian because of the order and detail orientation."),
-    ("Librarian", "Farmer", "He fits the librarian stereotype too well."),
-    ("Librarian", "Salesman", "Withdrawn personality says librarian."),
-    ("Librarian", "Farmer", "Steve seems methodical, likely a librarian."),
-    ("Librarian", "Physician", "Loves order and structure, classic librarian."),
-    ("Farmer", "Librarian", "There are way more farmers than librarians in any population, so I picked farmer first based on base rates."),
-    ("Farmer", "Salesman", "Statistically, there are more farmers, even if personality fits librarian."),
-    ("Farmer", "Physician", "Base rate matters: farmer is more common as an occupation."),
-    ("Physician", "Librarian", "He could be a meticulous doctor. Detail oriented fits."),
-    ("Physician", "Farmer", "Maybe a careful pathologist or researcher type doctor."),
-    ("Salesman", "Librarian", "I considered the base rates. More salesmen than librarians."),
-    ("Airline Pilot", "Physician", "Pilots are very detail oriented and orderly. Could fit."),
+    (("Librarian", "Physician", "Airline Pilot", "Salesman", "Farmer"),
+     "Librarian first - shy, orderly, detail-oriented. Physician second because of meticulousness."),
+    (("Librarian", "Physician", "Farmer", "Salesman", "Airline Pilot"),
+     "The personality matches the librarian stereotype almost perfectly."),
+    (("Librarian", "Physician", "Airline Pilot", "Farmer", "Salesman"),
+     "Sounds quiet, like someone who works in books. Pilot last? actually third for detail."),
+    (("Librarian", "Physician", "Airline Pilot", "Salesman", "Farmer"),
+     "Tidy and orderly = librarian. Then physician for the precision."),
+    (("Librarian", "Physician", "Airline Pilot", "Farmer", "Salesman"),
+     "Meek and detail oriented strongly suggests librarian."),
+    (("Librarian", "Airline Pilot", "Physician", "Farmer", "Salesman"),
+     "His personality fits the librarian image; pilots are also detail-oriented."),
+    (("Librarian", "Physician", "Airline Pilot", "Salesman", "Farmer"),
+     "Shy and structured points to librarian over the others."),
+    (("Librarian", "Physician", "Airline Pilot", "Farmer", "Salesman"),
+     "All those traits scream librarian to me."),
+    (("Librarian", "Physician", "Airline Pilot", "Farmer", "Salesman"),
+     "Picked librarian because of the order and detail orientation."),
+    (("Librarian", "Physician", "Airline Pilot", "Salesman", "Farmer"),
+     "He fits the librarian stereotype too well."),
+    (("Librarian", "Physician", "Farmer", "Salesman", "Airline Pilot"),
+     "Withdrawn personality says librarian."),
+    (("Librarian", "Airline Pilot", "Physician", "Salesman", "Farmer"),
+     "Steve seems methodical, likely a librarian."),
+    (("Librarian", "Physician", "Airline Pilot", "Salesman", "Farmer"),
+     "Loves order and structure, classic librarian."),
+    (("Farmer", "Salesman", "Librarian", "Physician", "Airline Pilot"),
+     "There are way more farmers than librarians in any population, so I ranked by base rate."),
+    (("Farmer", "Salesman", "Physician", "Librarian", "Airline Pilot"),
+     "Statistically, more farmers than librarians, even if personality fits librarian."),
+    (("Farmer", "Salesman", "Physician", "Librarian", "Airline Pilot"),
+     "Base rate matters: farmer is the most common occupation."),
+    (("Physician", "Librarian", "Airline Pilot", "Farmer", "Salesman"),
+     "He could be a meticulous doctor. Detail oriented fits a physician."),
+    (("Physician", "Librarian", "Airline Pilot", "Salesman", "Farmer"),
+     "Maybe a careful pathologist or researcher type doctor."),
+    (("Salesman", "Farmer", "Librarian", "Physician", "Airline Pilot"),
+     "I considered the base rates. More salesmen than librarians."),
+    (("Airline Pilot", "Physician", "Librarian", "Salesman", "Farmer"),
+     "Pilots are very detail oriented and orderly. Could fit."),
 ]
 
 TAXI_PROBABILITY = [
@@ -110,25 +132,26 @@ def fresh_cookies(extra=None):
 
 
 def seed_letter_k():
-    print(f"Seeding letter_k ({len(LETTER_K_FIRST)} first + {len(LETTER_K_THIRD)} third)...")
+    print(f"Seeding letter_k ({len(LETTER_K_N)} n + {len(LETTER_K_ING)} ing)...")
     ok = 0
-    for num, text in LETTER_K_FIRST:
-        if post("/submit/letter_k", fresh_cookies({"arm_letter_k": "first"}),
+    for num, text in LETTER_K_N:
+        if post("/submit/letter_k", fresh_cookies({"arm_letter_k": "n"}),
                 {"numeric": num, "text": text}):
             ok += 1
-    for num, text in LETTER_K_THIRD:
-        if post("/submit/letter_k", fresh_cookies({"arm_letter_k": "third"}),
+    for num, text in LETTER_K_ING:
+        if post("/submit/letter_k", fresh_cookies({"arm_letter_k": "ing"}),
                 {"numeric": num, "text": text}):
             ok += 1
-    print(f"  letter_k: {ok}/{len(LETTER_K_FIRST) + len(LETTER_K_THIRD)} submitted")
+    print(f"  letter_k: {ok}/{len(LETTER_K_N) + len(LETTER_K_ING)} submitted")
 
 
 def seed_steve():
     print(f"Seeding steve ({len(STEVE_DATA)})...")
     ok = 0
-    for c1, c2, text in STEVE_DATA:
-        if post("/submit/steve", fresh_cookies(),
-                {"choice_1": c1, "choice_2": c2, "text": text}):
+    for ranking, text in STEVE_DATA:
+        payload = {f"choice_{i+1}": occ for i, occ in enumerate(ranking)}
+        payload["text"] = text
+        if post("/submit/steve", fresh_cookies(), payload):
             ok += 1
     print(f"  steve: {ok}/{len(STEVE_DATA)} submitted")
 

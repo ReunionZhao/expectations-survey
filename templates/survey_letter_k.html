@@ -3,25 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Letter K</title>
+  <title>Words</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <div class="page">
     <div class="card">
-      <h1>Consider the letter K.</h1>
+      <h1>Words</h1>
 
       {% if preview %}
       <div class="preview-banner">Preview mode (arm: {{ arm }}). Submissions are disabled.</div>
       {% endif %}
 
       <form method="post" action="{{ '#' if preview else '/submit/letter_k' }}">
-        {% if arm == "first" %}
-        <p class="question">About what percentage of English words have K as the <strong>first letter</strong></p>
-        <p class="letter-slots"><strong>k</strong> _ _ _ _ _ _</p>
+        <p class="question">Estimate the percentage of words in the English language of the form:</p>
+        {% if arm == "n" %}
+        <p class="letter-slots">_ _ _ _ _ <strong>n</strong> _</p>
         {% else %}
-        <p class="question">About what percentage of English words have K as the <strong>third letter</strong></p>
-        <p class="letter-slots">_ _ <strong>k</strong> _ _ _ _</p>
+        <p class="letter-slots">_ _ _ _ <strong>i n g</strong></p>
         {% endif %}
 
         <div class="numeric-row">

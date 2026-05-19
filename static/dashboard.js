@@ -51,9 +51,19 @@ const refLinesPlugin = {
       ctx.setLineDash([]);
       ctx.fillStyle = line.color || "#000";
       ctx.font = "bold 12px Cambria, serif";
-      ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
-      ctx.fillText(line.label, x, area.top - 2);
+      let textX = x;
+      if (line.labelAlign === "left") {
+        textX = x - 6;
+        ctx.textAlign = "right";
+      } else if (line.labelAlign === "right") {
+        textX = x + 6;
+        ctx.textAlign = "left";
+      } else {
+        ctx.textAlign = "center";
+      }
+      const yOffset = typeof line.labelYOffset === "number" ? line.labelYOffset : 0;
+      ctx.fillText(line.label, textX, area.top - 2 + yOffset);
       ctx.restore();
     });
   },
@@ -89,6 +99,36 @@ function binCounts(values) {
 function asPercent(counts, total) {
   if (!total) return counts.map(() => 0);
   return counts.map((c) => Number(((c / total) * 100).toFixed(1)));
+}
+
+function mean(vals) {
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function median(vals) {
+  if (!vals.length) return null;
+  const sorted = [...vals].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Spread labels horizontally on opposite sides of their lines so they sit on
+// the same baseline without overlapping each other.
+function meanMedianLines(vals) {
+  const mn = mean(vals);
+  const md = median(vals);
+  if (mn === null || md === null) return [];
+  const meanLine = { value: mn, label: `mean ${mn.toFixed(1)}%`, color: "#6e2436" };
+  const medianLine = { value: md, label: `median ${md.toFixed(1)}%`, color: "#0a113f" };
+  if (mn <= md) {
+    meanLine.labelAlign = "left";
+    medianLine.labelAlign = "right";
+  } else {
+    meanLine.labelAlign = "right";
+    medianLine.labelAlign = "left";
+  }
+  return [meanLine, medianLine];
 }
 
 function wrapLabel(s) {
@@ -127,7 +167,7 @@ function makeHistogram(canvasId, color, refLines) {
     },
     options: {
       responsive: true,
-      layout: { padding: { top: refLines && refLines.length ? 22 : 4 } },
+      layout: { padding: { top: 32 } },
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}%` } },
@@ -209,25 +249,24 @@ function makeSingleCategoryBar(canvasId, categories, color) {
 // ------------------------------------------------------------
 // Charts (created once, updated on each refresh)
 // ------------------------------------------------------------
-let kHistFirstChart, kHistThirdChart, kLabelsChart;
-let steveLabelsChart, steveFirstChart, steveSecondChart;
+let kHistNChart, kHistIngChart, kLabelsChart;
+let steveLabelsChart, steveFirstChart;
 let taxiHistProbChart, taxiHistFreqChart, taxiLabelsChart;
 
 function initCharts() {
-  kHistFirstChart = makeHistogram("kHistFirst", COLORS.arm_a);
-  kHistThirdChart = makeHistogram("kHistThird", COLORS.arm_b);
+  kHistNChart = makeHistogram("kHistN", COLORS.arm_a);
+  kHistIngChart = makeHistogram("kHistIng", COLORS.arm_b);
   kLabelsChart = makeGroupedCategoryBar(
     "kLabels",
     LETTER_K_LABELS.concat(["unclassified"]),
     [
-      { label: "Arm: first", color: COLORS.arm_a },
-      { label: "Arm: third", color: COLORS.arm_b },
+      { label: "Arm: _ _ _ _ _ n _", color: COLORS.arm_a },
+      { label: "Arm: _ _ _ _ i n g", color: COLORS.arm_b },
     ]
   );
 
   steveLabelsChart = makeSingleCategoryBar("steveLabels", STEVE_LABELS.concat(["unclassified"]), COLORS.steve);
   steveFirstChart = makeSingleCategoryBar("steveFirst", STEVE_OCCUPATIONS, COLORS.arm_a);
-  steveSecondChart = makeSingleCategoryBar("steveSecond", STEVE_OCCUPATIONS, COLORS.arm_b);
 
   taxiHistProbChart = makeHistogram("taxiHistProb", COLORS.arm_a, TAXI_REF_LINES);
   taxiHistFreqChart = makeHistogram("taxiHistFreq", COLORS.arm_b, TAXI_REF_LINES);
@@ -242,46 +281,58 @@ function initCharts() {
 }
 
 // ------------------------------------------------------------
-// Steve heatmap (colored cells + percentage of total)
+// Steve rank-frequency table.
+//   rank_counts: array of 5 objects { Occupation -> count }
+//   Rows = rank slot 1..5. Within each row, occupations are sorted by count desc.
 // ------------------------------------------------------------
-function renderSteveHeatmap(matrix, total) {
-  const wrap = document.getElementById("steveHeatmapWrap");
-  let maxVal = 0;
-  STEVE_OCCUPATIONS.forEach((r) =>
-    STEVE_OCCUPATIONS.forEach((c) => {
-      const v = matrix[r]?.[c] ?? 0;
-      if (v > maxVal) maxVal = v;
-    })
-  );
-
+function renderSteveRankTable(rankCounts, total) {
+  const wrap = document.getElementById("steveRankTableWrap");
   const table = document.createElement("table");
-  table.className = "heatmap-table";
-  const thead = document.createElement("thead");
-  let head = "<tr><th></th>";
-  STEVE_OCCUPATIONS.forEach((c) => (head += `<th>${c}</th>`));
-  head += "</tr>";
-  thead.innerHTML = head;
-  table.appendChild(thead);
+  table.className = "rank-freq-table";
 
-  const tbody = document.createElement("tbody");
-  STEVE_OCCUPATIONS.forEach((r) => {
+  const head = document.createElement("thead");
+  let headHtml = "<tr><th>Rank</th>";
+  for (let i = 1; i <= STEVE_OCCUPATIONS.length; i++) {
+    headHtml += `<th>#${i}</th>`;
+  }
+  headHtml += "</tr>";
+  head.innerHTML = headHtml;
+  table.appendChild(head);
+
+  const body = document.createElement("tbody");
+  const denom = total > 0 ? total : 0;
+  rankCounts.forEach((counts, rankIdx) => {
     const tr = document.createElement("tr");
-    let row = `<th>${r}</th>`;
-    STEVE_OCCUPATIONS.forEach((c) => {
-      const v = matrix[r]?.[c] ?? 0;
-      const intensity = maxVal > 0 ? v / maxVal : 0;
-      const bg = `rgba(0,127,120,${intensity.toFixed(2)})`;
+    let row = `<th>${rankIdx + 1}</th>`;
+    const sorted = STEVE_OCCUPATIONS
+      .map((occ) => [occ, counts[occ] || 0])
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const maxCount = sorted.length > 0 ? sorted[0][1] : 0;
+    sorted.forEach(([occ, c]) => {
+      const pct = denom > 0 ? Math.round((c / denom) * 100) : 0;
+      const intensity = maxCount > 0 ? c / maxCount : 0;
+      const bg = `rgba(0,127,120,${(intensity * 0.85).toFixed(2)})`;
       const fg = intensity > 0.55 ? "#ffffff" : "#0a113f";
-      const pct = total > 0 ? ((v / total) * 100).toFixed(0) : 0;
-      const display = total > 0 ? `${pct}%` : "0%";
-      row += `<td class="cell" style="background:${bg};color:${fg}">${display}</td>`;
+      row += `<td class="rank-cell" style="background:${bg};color:${fg}">`
+           + `<div class="rank-cell-occ">${occ}</div>`
+           + `<div class="rank-cell-pct">${pct}%<span class="rank-cell-n"> (${c})</span></div>`
+           + `</td>`;
     });
     tr.innerHTML = row;
-    tbody.appendChild(tr);
+    body.appendChild(tr);
   });
-  table.appendChild(tbody);
+  table.appendChild(body);
+
   wrap.innerHTML = "";
   wrap.appendChild(table);
+
+  if (denom === 0) {
+    const note = document.createElement("p");
+    note.className = "tiny";
+    note.style.marginTop = "8px";
+    note.textContent = "No complete rankings yet.";
+    wrap.appendChild(note);
+  }
 }
 
 // ------------------------------------------------------------
@@ -339,8 +390,8 @@ function refreshWordClouds() {
     const img = document.getElementById(id);
     if (img) img.src = `${url}?t=${t}`;
   };
-  swap("kWcFirst", "/api/wordcloud_image/letter_k/first");
-  swap("kWcThird", "/api/wordcloud_image/letter_k/third");
+  swap("kWcN", "/api/wordcloud_image/letter_k/n");
+  swap("kWcIng", "/api/wordcloud_image/letter_k/ing");
   swap("steveWc", "/api/wordcloud_image/steve/all");
   swap("taxiWcProb", "/api/wordcloud_image/taxi/probability");
   swap("taxiWcFreq", "/api/wordcloud_image/taxi/frequentist");
@@ -364,27 +415,29 @@ async function refreshData() {
     return;
   }
 
-  // ---- Letter K ----
+  // ---- Example (was Letter K): arms n and ing ----
   const k = data.letter_k;
-  const kFirstN = k.by_arm.first.length;
-  const kThirdN = k.by_arm.third.length;
-  setText("kCountFirst", kFirstN);
-  setText("kCountThird", kThirdN);
+  const kNN = (k.by_arm.n || []).length;
+  const kIngN = (k.by_arm.ing || []).length;
+  setText("kCountN", kNN);
+  setText("kCountIng", kIngN);
 
-  kHistFirstChart.data.datasets[0].data = asPercent(binCounts(k.by_arm.first), kFirstN);
-  kHistFirstChart.update();
-  kHistThirdChart.data.datasets[0].data = asPercent(binCounts(k.by_arm.third), kThirdN);
-  kHistThirdChart.update();
+  kHistNChart.data.datasets[0].data = asPercent(binCounts(k.by_arm.n || []), kNN);
+  kHistNChart.options.plugins.refLines.lines = meanMedianLines(k.by_arm.n || []);
+  kHistNChart.update();
+  kHistIngChart.data.datasets[0].data = asPercent(binCounts(k.by_arm.ing || []), kIngN);
+  kHistIngChart.options.plugins.refLines.lines = meanMedianLines(k.by_arm.ing || []);
+  kHistIngChart.update();
 
   const kCats = LETTER_K_LABELS.concat(["unclassified"]);
-  const kFirstCounts = kCats.map((c) =>
-    c === "unclassified" ? k.label_unclassified_by_arm.first : (k.label_counts_by_arm.first[c] || 0)
+  const kNCounts = kCats.map((c) =>
+    c === "unclassified" ? (k.label_unclassified_by_arm.n || 0) : ((k.label_counts_by_arm.n || {})[c] || 0)
   );
-  const kThirdCounts = kCats.map((c) =>
-    c === "unclassified" ? k.label_unclassified_by_arm.third : (k.label_counts_by_arm.third[c] || 0)
+  const kIngCounts = kCats.map((c) =>
+    c === "unclassified" ? (k.label_unclassified_by_arm.ing || 0) : ((k.label_counts_by_arm.ing || {})[c] || 0)
   );
-  kLabelsChart.data.datasets[0].data = asPercent(kFirstCounts, kFirstN);
-  kLabelsChart.data.datasets[1].data = asPercent(kThirdCounts, kThirdN);
+  kLabelsChart.data.datasets[0].data = asPercent(kNCounts, kNN);
+  kLabelsChart.data.datasets[1].data = asPercent(kIngCounts, kIngN);
   kLabelsChart.update();
 
   const kColumns = [
@@ -392,41 +445,41 @@ async function refreshData() {
     { label: "Reasoning", get: (r) => r.text },
     { label: "Label", get: (r) => fmtLabelInline(r.label) },
   ];
-  const kFirstRows = k.latest.filter((r) => r.arm === "first");
-  const kThirdRows = k.latest.filter((r) => r.arm === "third");
+  const kNRows = k.latest.filter((r) => r.arm === "n");
+  const kIngRows = k.latest.filter((r) => r.arm === "ing");
   renderRawDataGroups("kLatest", [
-    { label: "Arm: first", rows: kFirstRows },
-    { label: "Arm: third", rows: kThirdRows },
+    { label: "Arm: _ _ _ _ _ n _", rows: kNRows },
+    { label: "Arm: _ _ _ _ i n g", rows: kIngRows },
   ], kColumns);
 
-  // ---- Steve ----
+  // ---- Steve (full 1..5 ranking) ----
   const s = data.steve;
-  setText("steveTotalLocal", s.total);
-  const sTotal = s.total;
+  const sTotal = s.total || 0;
+  setText("steveTotalLocal", sTotal);
 
+  const rankCounts = s.rank_counts || [];
+  const rank1 = rankCounts[0] || {};
   steveFirstChart.data.datasets[0].data = asPercent(
-    STEVE_OCCUPATIONS.map((o) => s.first_counts[o] || 0),
+    STEVE_OCCUPATIONS.map((o) => rank1[o] || 0),
     sTotal
   );
   steveFirstChart.update();
-  steveSecondChart.data.datasets[0].data = asPercent(
-    STEVE_OCCUPATIONS.map((o) => s.second_counts[o] || 0),
-    sTotal
-  );
-  steveSecondChart.update();
+
+  renderSteveRankTable(rankCounts.length === 5 ? rankCounts : [{},{},{},{},{}], sTotal);
 
   const sCounts = STEVE_LABELS.map((l) => s.label_counts[l] || 0);
   sCounts.push(s.label_unclassified || 0);
   steveLabelsChart.data.datasets[0].data = asPercent(sCounts, sTotal);
   steveLabelsChart.update();
 
-  renderSteveHeatmap(s.first_to_second, sTotal);
-
   renderRawDataGroups("steveLatest", [
     { label: "All responses", rows: s.latest },
   ], [
-    { label: "Most likely", get: (r) => r.choice_1 },
-    { label: "Second", get: (r) => r.choice_2 },
+    { label: "#1", get: (r) => (r.ranking || [])[0] },
+    { label: "#2", get: (r) => (r.ranking || [])[1] },
+    { label: "#3", get: (r) => (r.ranking || [])[2] },
+    { label: "#4", get: (r) => (r.ranking || [])[3] },
+    { label: "#5", get: (r) => (r.ranking || [])[4] },
     { label: "Reasoning", get: (r) => r.text },
     { label: "Label", get: (r) => fmtLabelInline(r.label) },
   ]);
@@ -505,7 +558,7 @@ async function resetModule(module) {
 async function showPrompt(module) {
   const res = await fetch("/api/prompts");
   const data = await res.json();
-  const titles = { letter_k: "Letter K prompt", steve: "Steve prompt", taxi: "Taxi Cab prompt" };
+  const titles = { letter_k: "Words prompt", steve: "Steve prompt", taxi: "Taxi Cab prompt" };
   document.getElementById("promptTitle").textContent = titles[module] || "Prompt";
   document.getElementById("promptContent").textContent = data[module] || "";
   document.getElementById("promptModal").classList.remove("hidden");

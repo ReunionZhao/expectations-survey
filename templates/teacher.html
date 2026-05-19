@@ -15,8 +15,8 @@
 
       <div class="grid grid-three">
         <div class="panel qr-panel">
-          <h3>Letter K</h3>
-          <img src="/api/qr/letter_k" alt="Letter K QR" class="qr">
+          <h3>Words</h3>
+          <img src="/api/qr/letter_k" alt="Words QR" class="qr">
           <div class="module-buttons">
             <a class="link-btn btn-sample" href="/sample/letter_k" target="_blank" rel="noopener noreferrer">Sample Question</a>
             <button class="control-btn btn-refresh" data-action="refresh">Refresh now</button>
@@ -51,20 +51,20 @@
         </div>
       </div>
 
-      <!-- ============== Letter K ============== -->
+      <!-- ============== Words (was: Letter K / Example) ============== -->
       <section class="module-section module-letter-k first-module">
-        <h2 class="module-title">Letter K</h2>
-        <p class="module-blurb">Random assignment between two arms. Arm <em>first</em>: students see "K as the first letter". Arm <em>third</em>: students see "K as the third letter".</p>
-        <p class="module-counts">Responses received: first <strong id="kCountFirst">0</strong>, third <strong id="kCountThird">0</strong>.</p>
+        <h2 class="module-title">Words</h2>
+        <p class="module-blurb">Random assignment between two arms. Arm <em>n</em>: students estimate the share of 7-letter words of the form <code>_ _ _ _ _ n _</code>. Arm <em>ing</em>: students estimate the share of 7-letter words of the form <code>_ _ _ _ i n g</code>. Logically, the "ing" answer must be smaller (every <em>ing</em> word is an <em>n6</em> word).</p>
+        <p class="module-counts">Responses received: n <strong id="kCountN">0</strong>, ing <strong id="kCountIng">0</strong>.</p>
 
         <div class="grid">
           <div class="panel">
-            <h3>Distribution of guesses, arm: first</h3>
-            <canvas id="kHistFirst" height="180"></canvas>
+            <h3>Distribution of guesses, arm: _ _ _ _ _ n _</h3>
+            <canvas id="kHistN" height="180"></canvas>
           </div>
           <div class="panel">
-            <h3>Distribution of guesses, arm: third</h3>
-            <canvas id="kHistThird" height="180"></canvas>
+            <h3>Distribution of guesses, arm: _ _ _ _ i n g</h3>
+            <canvas id="kHistIng" height="180"></canvas>
           </div>
         </div>
 
@@ -75,17 +75,17 @@
 
         <div class="grid">
           <div class="panel">
-            <h3>Word cloud, arm: first</h3>
-            <img id="kWcFirst" class="word-cloud-img" src="/api/wordcloud_image/letter_k/first" alt="">
+            <h3>Word cloud, arm: _ _ _ _ _ n _</h3>
+            <img id="kWcN" class="word-cloud-img" src="/api/wordcloud_image/letter_k/n" alt="">
           </div>
           <div class="panel">
-            <h3>Word cloud, arm: third</h3>
-            <img id="kWcThird" class="word-cloud-img" src="/api/wordcloud_image/letter_k/third" alt="">
+            <h3>Word cloud, arm: _ _ _ _ i n g</h3>
+            <img id="kWcIng" class="word-cloud-img" src="/api/wordcloud_image/letter_k/ing" alt="">
           </div>
         </div>
 
         <div class="panel raw-data-panel">
-          <h3>Letter K raw data (click to expand)</h3>
+          <h3>Words raw data (click to expand)</h3>
           <div id="kLatest"></div>
         </div>
       </section>
@@ -93,17 +93,18 @@
       <!-- ============== Steve ============== -->
       <section class="module-section module-steve">
         <h2 class="module-title">Steve</h2>
-        <p class="module-blurb">Single arm: everyone reads the same description. Each student picks "most likely" and "second most likely" from Farmer, Salesman, Airline Pilot, Librarian, Physician.</p>
+        <p class="module-blurb">Single arm: everyone reads the same description. Each student ranks all five occupations from 1 (most likely) to 5 (least likely): Farmer, Salesman, Airline Pilot, Librarian, Physician.</p>
         <p class="module-counts">Total responses: <strong id="steveTotalLocal">0</strong>.</p>
 
         <div class="grid">
           <div class="panel">
-            <h3>Most likely occupation</h3>
+            <h3>Most likely occupation (rank&nbsp;1)</h3>
             <canvas id="steveFirst" height="180"></canvas>
           </div>
           <div class="panel">
-            <h3>Second most likely occupation</h3>
-            <canvas id="steveSecond" height="180"></canvas>
+            <h3>Frequency of each occupation by rank</h3>
+            <div id="steveRankTableWrap"></div>
+            <p class="tiny">Each row is a rank slot. Within a row, occupations are sorted by how often respondents placed them there, from highest to lowest.</p>
           </div>
         </div>
 
@@ -113,15 +114,7 @@
             <canvas id="steveLabels" height="180"></canvas>
           </div>
           <div class="panel">
-            <h3>First &rarr; Second pick flow</h3>
-            <div id="steveHeatmapWrap"></div>
-            <p class="tiny">Rows are "most likely". Columns are "second most likely". Cells show % of total responses.</p>
-          </div>
-        </div>
-
-        <div class="panel">
-          <h3>Word cloud</h3>
-          <div class="wc-single-wrap">
+            <h3>Word cloud</h3>
             <img id="steveWc" class="word-cloud-img" src="/api/wordcloud_image/steve/all" alt="">
           </div>
         </div>
