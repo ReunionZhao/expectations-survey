@@ -9,16 +9,21 @@
 <body>
   <div class="page">
     <div class="card">
-      <h1>Thanks for participating!</h1>
-      <p class="subtitle">Your answer has been recorded.</p>
-      {% if module == "letter_k" %}
-        <p class="tiny">Module: Letter K. You can close this page now.</p>
-      {% elif module == "steve" %}
-        <p class="tiny">Module: Steve. You can close this page now.</p>
-      {% elif module == "taxi" %}
-        <p class="tiny">Module: Taxi Cab. You can close this page now.</p>
+      {% if all_done %}
+        <h1>All done — thank you!</h1>
+        <p class="subtitle">You've completed all three questions. You can close this page now.</p>
       {% else %}
-        <p class="tiny">You can close this page now.</p>
+        <h1>Thanks for participating!</h1>
+        <p class="subtitle">Your answer has been recorded.</p>
+        {% if module == "letter_k" %}
+          <p class="tiny">Module: Words. You can close this page now.</p>
+        {% elif module == "steve" %}
+          <p class="tiny">Module: Steve. You can close this page now.</p>
+        {% elif module == "taxi" %}
+          <p class="tiny">Module: Taxi Cab. You can close this page now.</p>
+        {% else %}
+          <p class="tiny">You can close this page now.</p>
+        {% endif %}
       {% endif %}
     </div>
   </div>

@@ -1,4 +1,5 @@
 import io
+import itertools
 import json
 import os
 import random
@@ -31,6 +32,12 @@ MODULE_ARMS = {
 }
 STEVE_OCCUPATIONS = ("Farmer", "Salesman", "Airline Pilot", "Librarian", "Physician")
 STEVE_RANKS = (1, 2, 3, 4, 5)
+
+# All 6 permutations of the three modules, used by /survey/all to chain the
+# questions in a uniformly-balanced random order per respondent.
+MODULE_PERMUTATIONS = [list(p) for p in itertools.permutations(MODULES)]
+COOKIE_MODULE_ORDER = "module_order"
+COOKIE_MAX_AGE = 60 * 60 * 6
 
 # ---------- Classification prompts ----------
 
@@ -181,9 +188,10 @@ def init_db():
             )
             """
         )
-        # Migration: older databases pre-date the rank columns (choice_3..5).
+        # Migration: older databases pre-date the rank columns (choice_3..5)
+        # and the module_order column (recorded for the /survey/all chained flow).
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(responses)").fetchall()}
-        for col in ("choice_3", "choice_4", "choice_5"):
+        for col in ("choice_3", "choice_4", "choice_5", "module_order"):
             if col not in existing:
                 conn.execute(f"ALTER TABLE responses ADD COLUMN {col} TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_module ON responses(module)")
@@ -249,6 +257,52 @@ def has_submitted(respondent_id, module):
             (respondent_id, module),
         ).fetchone()
     return row is not None
+
+
+def assign_module_order_balanced():
+    """Pick the permutation of MODULES with the fewest distinct respondents
+    assigned so far (random among ties)."""
+    try:
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT module_order, COUNT(DISTINCT respondent_id) AS c "
+                "FROM responses WHERE module_order IS NOT NULL "
+                "GROUP BY module_order"
+            ).fetchall()
+        counts = {",".join(p): 0 for p in MODULE_PERMUTATIONS}
+        for r in rows:
+            key = r["module_order"]
+            if key in counts:
+                counts[key] = r["c"]
+        min_c = min(counts.values())
+        candidates = [k.split(",") for k, c in counts.items() if c == min_c]
+        return random.choice(candidates)
+    except Exception:
+        return random.choice(MODULE_PERMUTATIONS)
+
+
+def get_or_assign_module_order():
+    """Read the module_order cookie if valid, otherwise pick a balanced one."""
+    cookie = request.cookies.get(COOKIE_MODULE_ORDER, "")
+    parsed = [m for m in cookie.split(",") if m in MODULES]
+    if len(parsed) == len(MODULES) and set(parsed) == set(MODULES):
+        return parsed
+    return assign_module_order_balanced()
+
+
+def next_module_in_sequence(respondent_id, just_submitted=None):
+    """If the respondent is in a /survey/all chain, return the next module they
+    have not yet submitted. Returns None if not in a chain or all done."""
+    cookie = request.cookies.get(COOKIE_MODULE_ORDER, "")
+    order = [m for m in cookie.split(",") if m in MODULES]
+    if len(order) != len(MODULES) or set(order) != set(MODULES):
+        return None
+    for m in order:
+        if m == just_submitted:
+            continue
+        if not has_submitted(respondent_id, m):
+            return m
+    return None
 
 
 # ---------- LLM classification ----------
@@ -496,15 +550,37 @@ def index():
 def _render_module(module, template_name):
     rid = get_or_set_respondent()
     if has_submitted(rid, module):
-        return render_template("thanks.html", module=module)
+        return _finish_or_chain(rid, module)
     arm = get_arm_from_cookie_or_assign(module)
     context = {"arm": arm, "module": module}
     if module == "steve":
         context["occupations"] = STEVE_OCCUPATIONS
     response = make_response(render_template(template_name, **context))
-    response.set_cookie("respondent_id", rid, max_age=60 * 60 * 6)
+    response.set_cookie("respondent_id", rid, max_age=COOKIE_MAX_AGE)
     if arm is not None:
-        response.set_cookie(f"arm_{module}", arm, max_age=60 * 60 * 6)
+        response.set_cookie(f"arm_{module}", arm, max_age=COOKIE_MAX_AGE)
+    return response
+
+
+@app.route("/survey/all")
+def survey_all():
+    """Entry point for the combined random-order survey. Assigns a balanced
+    permutation of the three modules (or reuses the one from the cookie), sets
+    the respondent cookie, and redirects to the first un-submitted module."""
+    rid = get_or_set_respondent()
+    order = get_or_assign_module_order()
+    target = None
+    for m in order:
+        if not has_submitted(rid, m):
+            target = m
+            break
+
+    if target is None:
+        response = make_response(render_template("thanks.html", module=None, all_done=True))
+    else:
+        response = make_response(redirect(url_for(f"survey_{target}")))
+    response.set_cookie("respondent_id", rid, max_age=COOKIE_MAX_AGE)
+    response.set_cookie(COOKIE_MODULE_ORDER, ",".join(order), max_age=COOKIE_MAX_AGE)
     return response
 
 
@@ -557,8 +633,9 @@ def _submit_module(module, arm, numeric_value, choices, text):
     """choices: tuple/list of up to 5 entries (pad with None)."""
     padded = list(choices) + [None] * (5 - len(choices))
     rid = get_or_set_respondent()
+    order_cookie = request.cookies.get(COOKIE_MODULE_ORDER) or None
     if has_submitted(rid, module):
-        return render_template("thanks.html", module=module)
+        return _finish_or_chain(rid, module)
     created_at = datetime.now(timezone.utc).isoformat()
     with db_conn() as conn:
         cur = conn.execute(
@@ -566,19 +643,33 @@ def _submit_module(module, arm, numeric_value, choices, text):
             INSERT INTO responses
             (respondent_id, module, arm, numeric_value,
              choice_1, choice_2, choice_3, choice_4, choice_5,
-             text_value, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             text_value, created_at, module_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (rid, module, arm, numeric_value,
              padded[0], padded[1], padded[2], padded[3], padded[4],
-             text, created_at),
+             text, created_at, order_cookie),
         )
         new_id = cur.lastrowid
         conn.commit()
     ANALYSIS_EXECUTOR.submit(
         analyze_and_store, new_id, module, arm, numeric_value, padded, text
     )
-    return render_template("thanks.html", module=module)
+    return _finish_or_chain(rid, module)
+
+
+def _finish_or_chain(rid, just_submitted):
+    """If the respondent is mid-sequence, redirect to the next module.
+    Otherwise show thanks."""
+    nxt = next_module_in_sequence(rid, just_submitted=just_submitted)
+    if nxt:
+        return redirect(url_for(f"survey_{nxt}"))
+    in_chain = bool(request.cookies.get(COOKIE_MODULE_ORDER))
+    return render_template(
+        "thanks.html",
+        module=just_submitted,
+        all_done=in_chain,
+    )
 
 
 @app.post("/submit/letter_k")
@@ -647,9 +738,12 @@ def api_prompts():
 
 @app.route("/api/qr/<module>")
 def api_qr(module):
-    if module not in MODULES:
+    if module == "all":
+        url = f"{get_public_base_url()}/survey/all"
+    elif module in MODULES:
+        url = f"{get_public_base_url()}/survey/{module}"
+    else:
         return "Invalid module", 400
-    url = f"{get_public_base_url()}/survey/{module}"
     img = qrcode.make(url)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

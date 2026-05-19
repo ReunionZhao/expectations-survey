@@ -512,6 +512,54 @@ pre {
 }
 .response-group[open] summary::after { content: " -"; }
 .response-group table { border: 0; border-radius: 0; }
+/* Combined-survey QR panel (top of teacher dashboard) */
+.combined-qr-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 28px;
+  padding: 28px 32px;
+  border-top: 4px solid var(--SBSgreenblue);
+  margin-bottom: 12px;
+}
+.combined-qr-text { min-width: 0; }
+.combined-qr-title {
+  margin: 0 0 8px 0;
+  color: var(--SBSblue);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.combined-qr-blurb {
+  margin: 0 0 14px 0;
+  color: #43526e;
+  font-size: 16px;
+  line-height: 1.55;
+  max-width: 640px;
+}
+.qr-large {
+  width: 220px;
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  padding: 10px;
+  background: white;
+}
+.qr-subhead {
+  margin: 28px 0 4px 0;
+  color: #5d718d;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+@media (max-width: 720px) {
+  .combined-qr-panel {
+    grid-template-columns: 1fr;
+    text-align: center;
+    justify-items: center;
+  }
+}
+
 /* Steve ranking drag list */
 .ranker-hint {
   margin-top: -4px;
